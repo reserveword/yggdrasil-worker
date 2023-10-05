@@ -1,186 +1,219 @@
-let pubkey = "-----BEGIN PUBLIC KEY-----\nBase64==\n-----END PUBLIC KEY-----\n"
+const users = require('./dao/users.js')
+const profiles = require('./dao/profiles.js')
+const sessions = require('./dao/sessions.js')
+const textures = require('./dao/textures.js')
 
-let metadata = {
-	"skinDomains": [
-	],
-	"signaturePublickey": pubkey,
-	"meta": {
-		"implementationVersion": "20231005",
-		"serverName": "Minecraft auth server",
-		"implementationName": "yggdrasil-worker",
-		"feature.non_email_login": false
-	}
-}
+const response = require('./response.js')
+const png = require('./png.js')
 
-let users = {
-	user1: { password: 'password', accessToken: 'asdfaigrjgb', clientToken: 'client', profile: '3c2106f05891d9d1e6149859fb005c83' },
-	user2: { password: 'password', accessToken: 'asdfaigrjgb', clientToken: 'client' },
-}
+let metadata = undefined
 
-let profiles = {
-	'3c2106f05891d9d1e6149859fb005c83': {
-		id: '3c2106f05891d9d1e6149859fb005c83',
-		name: 'user01'
-	}
-}
-
-function success(body) {
-	if (typeof body === 'object') body = JSON.stringify(body)
-	if (body) {
-		return new Response(body, {
-			status: 200,
-			headers: {
-				'content-type': 'application/json; charset=utf-8',
+async function index(env) {
+	if (metadata === undefined) {
+		metadata = {
+			skinDomains: env.SKIN_DOMAINS,
+			signaturePublickey: env.PUBKEY,
+			meta: {
+				implementationVersion: env.VERSION,
+				serverName: env.SERVER_NAME,
+				implementationName: "yggdrasil-worker",
+				"feature.non_email_login": false
 			}
-		})
-	} else {
-		return new Response(null, {status: 204})
-	}
-}
-
-
-function fail(body, reason) {
-	if (typeof body === Object) body = JSON.stringify(body)
-	if (body) {
-		return new Response(body, {
-			status: reason ? reason : 400,
-			headers: {
-				'content-type': 'application/json; charset=utf-8',
-			}
-		})
-	} else {
-		return new Response(null, {status: reason ? reason : 400})
-	}
-}
-
-function authFail() {
-	return fail({ 'reason': 'auth failed' }, 403)
-}
-
-function notImpl() {
-	return fail({ 'reason': 'not implemented' }, 500)
-}
-
-function findUser(data) {
-	for (const username in users) {
-		const user = users[username]
-		if (data.accessToken === user.accessToken) {
-			return user
 		}
-		return undefined
 	}
+	return response.success(metadata)
 }
 
-function index() {
-	return success(metadata)
-}
-
-function authenticate(data) {
-	if (users[data.username].password === data.password) {
-		let token = crypto.randomUUID().replaceAll('-', '')
-		users[data.username].accessToken = token
-		users[data.username].clientToken = data.clientToken
-		return success({
-			accessToken: token,
-			clientToken: data.clientToken,
-			availableProfiles: [profiles[users[data.username].profile]],
-			selectedProfile: profiles[users[data.username].profile],
-			user: {
-				id: users[data.username].profile,
-				properties: []
-			}
-		})
+async function authenticate(env, data) {
+	const user = await users.getUserByUsername(env, data.username)
+	if (user.password !== data.password) {
+		return response.authFail()
 	}
-	return authFail()
-}
-
-function refresh(data) {
-	let user = findUser(data)
-	if (user === undefined) {
-		return authFail()
-	}
-	let token = crypto.randomUUID().replaceAll('-', '')
-	console.log(JSON.stringify(data));
-	console.log(JSON.stringify(users));
-	user.accessToken = token
 	user.clientToken = data.clientToken
-	return success({
-		accessToken: token,
-		clientToken: data.clientToken,
-		availableProfiles: [user.profile],
-		user: {id: user.profile, properties: []}
+	users.setUserToken(env, user)
+	const profile = await profiles.getProfile(env, user.profile)
+	return response.success({
+		accessToken: user.accessToken,
+		clientToken: user.clientToken,
+		availableProfiles: [profile],
+		selectedProfile: profile,
+		user: { id: user.id, properties: [] }
 	})
 }
 
-function validate(data) {
-	let user = findUser(data)
-	if (user === undefined) {
-		return authFail()
+async function refresh(env, data) {
+	const user = await users.getUserByAccessToken(env, data.accessToken)
+	if (user === null) {
+		return response.authFail()
 	}
-	return success()
+	user.clientToken = data.clientToken
+	users.setUserToken(env, user)
+	const profile = await profiles.getProfile(env, user.profile)
+	return response.success({
+		accessToken: user.accessToken,
+		clientToken: user.clientToken,
+		availableProfiles: [profile],
+		user: { id: user.id, properties: [] }
+	})
 }
 
-function invalidate(data) {
-	return notImpl()
-}
-
-function signout(data) {
-	if (users[data.username].password === data.password) {
-		let token = crypto.randomUUID().replaceAll('-', '')
-		users[data.username].accessToken = token
-		users[data.username].clientToken = crypto.randomUUID().replaceAll('-', '')
-		return success()
+async function validate(env, data) {
+	const user = await users.getUserByAccessToken(env, data.accessToken)
+	if (user === null) {
+		return response.authFail()
 	}
-	return authFail()
+	return response.success()
 }
 
-function joinServer(data, ip) {
-	let user = findUser(data)
-	if (user === undefined) {
-		return authFail()
+async function invalidate(env, data) {
+	return response.notImpl()
+}
+
+async function signout(env, data) {
+	const user = await users.getUserByUsername(env, data.username)
+	if (user.password !== data.password) {
+		return response.authFail()
 	}
-	user.recentTime = new Date().getTime()
-	// user.ip = ip
-	// user.serverId = data.serverId
-	return success()
+	user.clientToken = ''
+	users.setUserToken(env, user)
+	return response.authFail()
 }
 
-function hasJoined(data) {
-	for (const username in users) {
-		const user = users[username]
-		if (data.username === profiles[user.profile].name
-			&& new Date().getTime() - user.recentTime < 30 * 1000) { // 30s
-			return success(profiles[user.profile])
+async function joinServer(env, data, ip) {
+	const user = await users.getUserByAccessToken(env, data.accessToken)
+	if (user === null) {
+		return response.authFail()
+	}
+	sessions.addSession(env, data.serverId, user.username, ip)
+	return response.success()
+}
+
+function hasJoinedOfficial(data) {
+	let url = new URL('api.mojang.com/sessionserver/session/minecraft/hasJoined')
+	for (const [key, value] of data) {
+		url.searchParams.append(key, value)
+	}
+	return fetch(url)
+}
+
+async function hasJoined(env, data) {
+	const session = await sessions.getSessionById(env, data.serverId)
+	if (session === null) return hasJoinedOfficial(data)
+	const profile = await profiles.getProfileByName(env, session.username)
+	if (session === null) return hasJoinedOfficial(data)
+	return response.success(profile)
+}
+
+async function profile(env, uuid) {
+	const profile = await profiles.getProfile(env, uuid)
+	if (profile === null) return response.fail({ reason: 'not found' }, 404)
+	return response.success(profile)
+}
+
+async function texture(env, uuid) {
+	const texture = await textures.getTexture(env, uuid)
+	return new Response(texture, {
+		status: 200,
+		headers: {
+			'content-type': 'image/png'
+		}
+	})
+}
+
+async function createUser(env, data) {
+	const profileId = crypto.randomUUID().replaceAll('-', '')
+	const userResult = await users.createUser(env, data.username, datapassword, profileId)
+	if (!userResult.success) return response.fail({ reason: 'failed' })
+	const profileResult = await profiles.createProfile(env, profileId, data.name)
+	if (!profileResult.success) return response.fail({ reason: 'failed' })
+	return response.success()
+}
+
+async function updateUser(env, data) {
+	const user = await users.getUserByAccessToken(env, data.accessToken)
+	const userResult = await users.updateUser(env, user.id, data.username, datapassword)
+	if (!userResult.success) return response.fail({ reason: 'failed' })
+	const profileResult = await profiles.updateProfile(env, user.profile, data.name)
+	if (!profileResult.success) return response.fail({ reason: 'failed' })
+	return response.success()
+}
+
+async function listUser(env, data) {
+	return response.success(users.getUsers(env))
+}
+
+async function uploadSkin(env, data, host) {
+	const user = await users.getUserByAccessToken(env, data.accessToken)
+	const profile = await profiles.getRawProfile(env, user.profile)
+	let jsonTexture
+	try {
+		jsonTexture = JSON.parse(atob(profile.texture))
+	} catch (_) {
+		jsonTexture = {
+			profileId: profile.id,
+			profileName: profile.name,
+			textures: {}
 		}
 	}
-	return authFail()
+	if (jsonTexture.SKIN !== undefined) {
+		const skinId = jsonTexture.SKIN.url.slice(-32)
+		const delResult = await textures.deleteTexture(env, skinId)
+		if (!delResult.success) return response.fail({ reason: 'failed' })
+	}
+	const {image, digest} = await png.processPng(data.texture)
+	jsonTexture.timestamp = new Date().getTime()
+	jsonTexture.textures.SKIN = {
+		url: host + '/textures/' + digest,
+		metadata: {
+			model: data.model
+		}
+	}
+	const result = await profiles.updateTexture(env, user.profile, btoa(JSON.stringify(jsonTexture)))
+	if (!result.success) return response.fail({ reason: 'failed' })
+	const updResult = await textures.createTexture(env, digest, image)
+	if (!updResult.success) return response.fail({ reason: 'failed' })
+	return response.success()
 }
 
-function profile(uuid) {
-	uuid = uuid.toLowerCase()
-	let profile = profiles[uuid]
-	if (profile === undefined) return fail({ reason: 'not found' }, 404)
-	return success(profiles[uuid])
+async function uploadCape(env, data) {
+	const user = await users.getUserByAccessToken(env, data.accessToken)
+	return response.notImpl()
 }
 
 export default {
 	async fetch(request, env, ctx) {
 		let url = new URL(request.url);
-		let prefix = url.pathname;
-		if (url.pathname === '/') return index()
-		if (url.pathname === '/authserver/authenticate') return authenticate(await request.json())
-		if (url.pathname === '/authserver/refresh') return refresh(await request.json())
-		if (url.pathname === '/authserver/validate') return validate(await request.json())
-		if (url.pathname === '/authserver/invalidate') return invalidate(await request.json())
-		if (url.pathname === '/authserver/signout') return signout(await request.json())
-		if (url.pathname === '/sessionserver/session/minecraft/join') return joinServer(await request.json())
+		// basic auth server api
+		// status
+		if (url.pathname === '/') return await index(env)
+		// auth
+		if (url.pathname === '/authserver/authenticate') return await authenticate(env, request.json())
+		if (url.pathname === '/authserver/refresh') return await refresh(env, request.json())
+		if (url.pathname === '/authserver/validate') return await validate(env, request.json())
+		if (url.pathname === '/authserver/invalidate') return await invalidate(env, request.json())
+		if (url.pathname === '/authserver/signout') return await signout(env, request.json())
+		// session
+		if (url.pathname === '/sessionserver/session/minecraft/join') return await joinServer(env, request.json(), request.ip)
 		if (url.pathname.slice(0, 42) === '/sessionserver/session/minecraft/hasJoined') {
-			return hasJoined(await request.json())
+			return await hasJoined(env, url.searchParams)
 		}
+		// profile
 		if (url.pathname.slice(0, 24) === '/api/profiles/minecraft/') {
-			return profile(url.pathname.slice(24))
+			return await profile(env, url.pathname.slice(24))
 		}
-		return success({users: users, profiles: profiles})
-		return notImpl()
+		// texture
+		if (url.pathname.slice(0, 10) === '/textures/') {
+			return await texture(env, url.pathname.slice(10))
+		}
+		// extend edit api
+		// user-profile
+		if (url.pathname === '/users/create') return await createUser(env, request.json())
+		if (url.pathname === '/users/update') return await updateUser(env, request.json())
+		if (url.pathname === '/users/list') return await listUser(env)
+		// texture
+		if (url.pathname === '/users/skin') return await uploadSkin(env, request.json(), url.host)
+		if (url.pathname === '/users/cape') return await uploadCape(env, request.json())
+
+		return response.notImpl()
 	},
 };
