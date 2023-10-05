@@ -121,6 +121,7 @@ async function texture(env, uuid) {
 }
 
 async function createUser(env, data) {
+	if (!data.token === env.ADMIN_TOKEN) return response.authFail()
 	const profileId = crypto.randomUUID().replaceAll('-', '')
 	const userResult = await users.createUser(env, data.username, datapassword, profileId)
 	if (!userResult.success) return response.fail({ reason: 'failed' })
@@ -130,7 +131,12 @@ async function createUser(env, data) {
 }
 
 async function updateUser(env, data) {
-	const user = await users.getUserByAccessToken(env, data.accessToken)
+	let user
+	if (!data.token === env.ADMIN_TOKEN) {
+		user = await users.getUserByAccessToken(env, data.accessToken)
+	} else {
+		user = await users.getUserByUsername(env, data.username)
+	}
 	const userResult = await users.updateUser(env, user.id, data.username, datapassword)
 	if (!userResult.success) return response.fail({ reason: 'failed' })
 	const profileResult = await profiles.updateProfile(env, user.profile, data.name)
@@ -139,11 +145,17 @@ async function updateUser(env, data) {
 }
 
 async function listUser(env, data) {
+	if (!data.token === env.ADMIN_TOKEN) return response.authFail()
 	return response.success(users.getUsers(env))
 }
 
 async function uploadSkin(env, data, host) {
-	const user = await users.getUserByAccessToken(env, data.accessToken)
+	let user
+	if (!data.token === env.ADMIN_TOKEN) {
+		let user = await users.getUserByAccessToken(env, data.accessToken)
+	} else {
+		let user = await users.getUserByUsername(env, data.username)
+	}
 	const profile = await profiles.getRawProfile(env, user.profile)
 	let jsonTexture
 	try {
@@ -176,7 +188,12 @@ async function uploadSkin(env, data, host) {
 }
 
 async function uploadCape(env, data) {
-	const user = await users.getUserByAccessToken(env, data.accessToken)
+	let user
+	if (!data.token === env.ADMIN_TOKEN) {
+		let user = await users.getUserByAccessToken(env, data.accessToken)
+	} else {
+		let user = await users.getUserByUsername(env, data.username)
+	}
 	return response.notImpl()
 }
 
@@ -209,7 +226,7 @@ export default {
 		// user-profile
 		if (url.pathname === '/users/create') return await createUser(env, request.json())
 		if (url.pathname === '/users/update') return await updateUser(env, request.json())
-		if (url.pathname === '/users/list') return await listUser(env)
+		if (url.pathname === '/users/list') return await listUser(env, request.json())
 		// texture
 		if (url.pathname === '/users/skin') return await uploadSkin(env, request.json(), url.host)
 		if (url.pathname === '/users/cape') return await uploadCape(env, request.json())
