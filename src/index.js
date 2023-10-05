@@ -8,6 +8,14 @@ const png = require('./png.js')
 
 let metadata = undefined
 
+async function checkAuth(env, data) {
+	if (!data.token === env.ADMIN_TOKEN) {
+		return await users.getUserByAccessToken(env, data.accessToken)
+	} else {
+		return await users.getUserByUsername(env, data.username)
+	}
+}
+
 async function index(env) {
 	if (metadata === undefined) {
 		metadata = {
@@ -131,12 +139,7 @@ async function createUser(env, data) {
 }
 
 async function updateUser(env, data) {
-	let user
-	if (!data.token === env.ADMIN_TOKEN) {
-		user = await users.getUserByAccessToken(env, data.accessToken)
-	} else {
-		user = await users.getUserByUsername(env, data.username)
-	}
+	const user = await checkAuth(env, data)
 	const userResult = await users.updateUser(env, user.id, data.username, datapassword)
 	if (!userResult.success) return response.fail({ reason: 'failed' })
 	const profileResult = await profiles.updateProfile(env, user.profile, data.name)
@@ -146,16 +149,11 @@ async function updateUser(env, data) {
 
 async function listUser(env, data) {
 	if (!data.token === env.ADMIN_TOKEN) return response.authFail()
-	return response.success(users.getUsers(env))
+	return response.success(await users.getUsers(env))
 }
 
 async function uploadSkin(env, data, host) {
-	let user
-	if (!data.token === env.ADMIN_TOKEN) {
-		let user = await users.getUserByAccessToken(env, data.accessToken)
-	} else {
-		let user = await users.getUserByUsername(env, data.username)
-	}
+	const user = await checkAuth(env, data)
 	const profile = await profiles.getRawProfile(env, user.profile)
 	let jsonTexture
 	try {
@@ -223,6 +221,8 @@ export default {
 			return await texture(env, url.pathname.slice(10))
 		}
 		// extend edit api
+		// check env admin_token, in case token is empty
+		if (env.ADMIN_TOKEN.length < 32) return response.fail({reason: 'server error'})
 		// user-profile
 		if (url.pathname === '/users/create') return await createUser(env, request.json())
 		if (url.pathname === '/users/update') return await updateUser(env, request.json())
