@@ -1,6 +1,6 @@
 function buildProfile(profile) {
     // don't have texture
-    if (profile.textures === '') return {
+    if (!profile.textures) return {
         id: profile.id,
         name: profile.name
     }
@@ -11,14 +11,14 @@ function buildProfile(profile) {
         properties: [
             {
                 name: 'textures',
-                value: profile.texture
+                value: profile.textures
             }
         ]
     }
 }
 
 export async function getProfile(env, id) {
-	profile = await env.DB.prepare('select * from profiles where id = ?').bind(id).first()
+	const profile = await env.DB.prepare('select * from profiles where id = ?').bind(id).first()
     return buildProfile(profile)
 }
 
@@ -27,7 +27,8 @@ export async function getRawProfile(env, id) {
 }
 
 export async function getProfileByName(env, name) {
-	profile = await env.DB.prepare('select * from profiles where name = ?').bind(name).first()
+	const profile = await env.DB.prepare('select * from profiles where name = ?').bind(name).first()
+    if (profile == null) throw null
     return buildProfile(profile)
 }
 
@@ -40,5 +41,5 @@ export function updateProfile(env, id, name) {
 }
 
 export async function updateTexture(env, id, texture) {
-    return env.DB.prepare('update profiles set texture = ? where id = ?').bind(texture, id).run()
+    return env.DB.prepare('update profiles set textures = ? where id = ?').bind(texture, id).run()
 }

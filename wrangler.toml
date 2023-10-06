@@ -4,8 +4,11 @@ compatibility_date = "2023-10-02"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "yggdrasil"
+database_name = "yggdrasil-data"
 database_id = "f02cf4ed-7ef5-4078-adbb-009029959d3b"
+
+[site]
+bucket = "./manage-page"
 
 [vars]
 SKIN_DOMAINS = ["localhost", "127.0.0.1"]

@@ -1,6 +1,8 @@
-export function getSessionById(env, serverId, column) {
+export function getSessionById(env, serverId) {
     const timestamp = new Date().getTime() - 30*1000 // 30s ago
-	return env.DB.prepare('select * from sessions where server_id = ? and timestamp > ?').bind(serverId, timestamp).first(column)
+	const result = env.DB.prepare('select * from sessions where server_id = ? and timestamp > ?').bind(serverId, timestamp).first()
+    if (result === null) throw null
+    return result
 }
 
 export function addSession(env, serverId, username, ip) {

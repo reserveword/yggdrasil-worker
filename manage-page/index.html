@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="./index.js"></script>
+    <title>Minecraft Auth Server Management</title>
+</head>
+<body>
+    <div>
+        <form>
+            用户名<input type="text" id="username"><br>
+            密码<input type="password" id="password"><br>
+            登录状态：<span id="login-state">未登录</span>
+            <input type="hidden" id="access-token">
+            <input type="button" value="登录" id="login" onclick="userLogin()">
+        </form>
+    </div>
+    <div>
+        <form>
+            角色名<input type="text" id="character"><br>
+            <input type="button" value="更新" id="update-profile" onclick="updateUser()"><br>
+            皮肤<input type="file" id="skin"><input type="button" value="提交" onclick="uploadSkin()">
+        </form>
+    </div>
+    <div>
+        <form>
+            管理员凭证<input type="password" id="admin-token"><br>
+            <input type="button" value="查询" onclick="listUser()"><br>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>用户名</th>
+                        <th>密码</th>
+                        <th>角色ID</th>
+                        <th>角色名</th>
+                        <th>皮肤</th>
+                    </tr>
+                </thead>
+                <tbody id="user-list">
+                </tbody>
+            </table>
+        </form>
+    </div>
+    <div>
+        <form>
+            用户名<input type="text" id="admin-username"><br>
+            密码<input type="password" id="admin-password"><br>
+            角色名<input type="text" id="admin-character"><br>
+            <input type="button" value="创建账号" id="create" onclick="createUser()">
+        </form>
+    </div>
+</body>
+</html>

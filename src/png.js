@@ -8,10 +8,10 @@ export async function processPng(b64Png, characterId) {
         key: 'character uuid',
         value: characterId
     }))
-    const processedPng = Array.from(pngWrite(chunks)).map(x => String.fromCharCode(x)).join('')
-    const digest = await crypto.subtle.digest('SHA-256', processedPng)
+    const binaryPng = pngWrite(chunks)
+    const digest = await crypto.subtle.digest('SHA-256', binaryPng)
     return {
-        image: btoa(processedPng),
-        digest: digest
+        image: binaryPng.buffer,
+        digest: Array.from(new Uint32Array(digest)).map(x=>x.toString(16).padStart(8, "0")).join('')
     }
 }

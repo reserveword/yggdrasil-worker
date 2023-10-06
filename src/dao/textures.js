@@ -1,9 +1,9 @@
 export function getTexture(env, id) {
-	return env.DB.prepare('select texture from textures where id = ?').bind(id).first()
+	return env.DB.prepare('select texture from textures where id = ?').bind(id).first('texture')
 }
 
 export function createTexture(env, id, texture) {
-	return env.DB.prepare('insert into texture values (?,?)').bind(id, texture).run()
+	return env.DB.prepare('insert into textures values (?,?)').bind(id, texture).run()
 }
 
 export function deleteTexture(env, id) {

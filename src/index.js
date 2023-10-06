@@ -6,10 +6,14 @@ const textures = require('./dao/textures.js')
 const response = require('./response.js')
 const png = require('./png.js')
 
+import { getAssetFromKV } from '@cloudflare/kv-asset-handler';
+import manifestJSON from '__STATIC_CONTENT_MANIFEST';
+const assetManifest = JSON.parse(manifestJSON);
+
 let metadata = undefined
 
 async function checkAuth(env, data) {
-	if (!data.token === env.ADMIN_TOKEN) {
+	if (data.token !== env.ADMIN_TOKEN) {
 		return await users.getUserByAccessToken(env, data.accessToken)
 	} else {
 		return await users.getUserByUsername(env, data.username)
@@ -41,8 +45,8 @@ async function authenticate(env, data) {
 	users.setUserToken(env, user)
 	const profile = await profiles.getProfile(env, user.profile)
 	return response.success({
-		accessToken: user.accessToken,
-		clientToken: user.clientToken,
+		accessToken: user.access_token,
+		clientToken: user.client_token,
 		availableProfiles: [profile],
 		selectedProfile: profile,
 		user: { id: user.id, properties: [] }
@@ -58,8 +62,8 @@ async function refresh(env, data) {
 	users.setUserToken(env, user)
 	const profile = await profiles.getProfile(env, user.profile)
 	return response.success({
-		accessToken: user.accessToken,
-		clientToken: user.clientToken,
+		accessToken: user.access_token,
+		clientToken: user.client_token,
 		availableProfiles: [profile],
 		user: { id: user.id, properties: [] }
 	})
@@ -97,7 +101,7 @@ async function joinServer(env, data, ip) {
 }
 
 function hasJoinedOfficial(data) {
-	let url = new URL('api.mojang.com/sessionserver/session/minecraft/hasJoined')
+	let url = new URL('https://api.mojang.com/sessionserver/session/minecraft/hasJoined')
 	for (const [key, value] of data) {
 		url.searchParams.append(key, value)
 	}
@@ -105,11 +109,13 @@ function hasJoinedOfficial(data) {
 }
 
 async function hasJoined(env, data) {
-	const session = await sessions.getSessionById(env, data.serverId)
-	if (session === null) return hasJoinedOfficial(data)
-	const profile = await profiles.getProfileByName(env, session.username)
-	if (session === null) return hasJoinedOfficial(data)
-	return response.success(profile)
+	try {
+		const session = await sessions.getSessionById(env, data.get('serverId'))
+		const profile = await profiles.getProfileByName(env, session.username)
+		return response.success(profile)
+	} catch(_) {
+		return await hasJoinedOfficial(data)
+	}
 }
 
 async function profile(env, uuid) {
@@ -120,7 +126,7 @@ async function profile(env, uuid) {
 
 async function texture(env, uuid) {
 	const texture = await textures.getTexture(env, uuid)
-	return new Response(texture, {
+	return new Response(new Uint8Array(texture).buffer, {
 		status: 200,
 		headers: {
 			'content-type': 'image/png'
@@ -131,7 +137,7 @@ async function texture(env, uuid) {
 async function createUser(env, data) {
 	if (!data.token === env.ADMIN_TOKEN) return response.authFail()
 	const profileId = crypto.randomUUID().replaceAll('-', '')
-	const userResult = await users.createUser(env, data.username, datapassword, profileId)
+	const userResult = await users.createUser(env, data.username, data.password, profileId)
 	if (!userResult.success) return response.fail({ reason: 'failed' })
 	const profileResult = await profiles.createProfile(env, profileId, data.name)
 	if (!profileResult.success) return response.fail({ reason: 'failed' })
@@ -140,7 +146,7 @@ async function createUser(env, data) {
 
 async function updateUser(env, data) {
 	const user = await checkAuth(env, data)
-	const userResult = await users.updateUser(env, user.id, data.username, datapassword)
+	const userResult = await users.updateUser(env, user.id, data.username, data.password)
 	if (!userResult.success) return response.fail({ reason: 'failed' })
 	const profileResult = await profiles.updateProfile(env, user.profile, data.name)
 	if (!profileResult.success) return response.fail({ reason: 'failed' })
@@ -157,7 +163,7 @@ async function uploadSkin(env, data, host) {
 	const profile = await profiles.getRawProfile(env, user.profile)
 	let jsonTexture
 	try {
-		jsonTexture = JSON.parse(atob(profile.texture))
+		jsonTexture = JSON.parse(atob(profile.textures))
 	} catch (_) {
 		jsonTexture = {
 			profileId: profile.id,
@@ -165,12 +171,13 @@ async function uploadSkin(env, data, host) {
 			textures: {}
 		}
 	}
-	if (jsonTexture.SKIN !== undefined) {
-		const skinId = jsonTexture.SKIN.url.slice(-32)
+	if (jsonTexture.textures.SKIN !== undefined) {
+		const url = jsonTexture.textures.SKIN.url
+		const skinId = url.slice(url.lastIndexOf('/') + 1)
 		const delResult = await textures.deleteTexture(env, skinId)
 		if (!delResult.success) return response.fail({ reason: 'failed' })
 	}
-	const {image, digest} = await png.processPng(data.texture)
+	const {image, digest} = await png.processPng(data.texture, profile.id)
 	jsonTexture.timestamp = new Date().getTime()
 	jsonTexture.textures.SKIN = {
 		url: host + '/textures/' + digest,
@@ -202,13 +209,13 @@ export default {
 		// status
 		if (url.pathname === '/') return await index(env)
 		// auth
-		if (url.pathname === '/authserver/authenticate') return await authenticate(env, request.json())
-		if (url.pathname === '/authserver/refresh') return await refresh(env, request.json())
-		if (url.pathname === '/authserver/validate') return await validate(env, request.json())
-		if (url.pathname === '/authserver/invalidate') return await invalidate(env, request.json())
-		if (url.pathname === '/authserver/signout') return await signout(env, request.json())
+		if (url.pathname === '/authserver/authenticate') return await authenticate(env, await request.json())
+		if (url.pathname === '/authserver/refresh') return await refresh(env, await request.json())
+		if (url.pathname === '/authserver/validate') return await validate(env, await request.json())
+		if (url.pathname === '/authserver/invalidate') return await invalidate(env, await request.json())
+		if (url.pathname === '/authserver/signout') return await signout(env, await request.json())
 		// session
-		if (url.pathname === '/sessionserver/session/minecraft/join') return await joinServer(env, request.json(), request.ip)
+		if (url.pathname === '/sessionserver/session/minecraft/join') return await joinServer(env, await request.json(), request.ip)
 		if (url.pathname.slice(0, 42) === '/sessionserver/session/minecraft/hasJoined') {
 			return await hasJoined(env, url.searchParams)
 		}
@@ -224,13 +231,24 @@ export default {
 		// check env admin_token, in case token is empty
 		if (env.ADMIN_TOKEN.length < 32) return response.fail({reason: 'server error'})
 		// user-profile
-		if (url.pathname === '/users/create') return await createUser(env, request.json())
-		if (url.pathname === '/users/update') return await updateUser(env, request.json())
-		if (url.pathname === '/users/list') return await listUser(env, request.json())
+		if (url.pathname === '/users/create') return await createUser(env, await request.json())
+		if (url.pathname === '/users/update') return await updateUser(env, await request.json())
+		if (url.pathname === '/users/list') return await listUser(env, await request.json())
 		// texture
-		if (url.pathname === '/users/skin') return await uploadSkin(env, request.json(), url.host)
-		if (url.pathname === '/users/cape') return await uploadCape(env, request.json())
-
-		return response.notImpl()
+		if (url.pathname === '/users/skin') return await uploadSkin(env, await request.json(), url.host)
+		if (url.pathname === '/users/cape') return await uploadCape(env, await request.json())
+		// manage page
+		try {
+			return await getAssetFromKV({
+				request,
+				waitUntil: ctx.waitUntil.bind(ctx),
+			}, {
+				ASSET_NAMESPACE: env.__STATIC_CONTENT,
+				ASSET_MANIFEST: assetManifest,
+			});
+		} catch (e) {
+			return response.success(assetManifest)
+			return response.notImpl()
+		}
 	},
 };
