@@ -6,10 +6,10 @@ export function getSessionById(env, serverId) {
 }
 
 export function addSession(env, serverId, username, ip) {
-    timestamp = new Date().getTime()
-    expireTimestamp = timestamp - 30 * 1000 // 30s ago
-    cleanSession(expireTimestamp) // will execute later anyway
-    return env.DB.prepare('insert into sessions values (?,?,?,?)').bind(serverId, username, ip, timestamp)
+    const timestamp = new Date().getTime()
+    const expireTimestamp = timestamp - 30 * 1000 // 30s ago
+    cleanSession(env, expireTimestamp) // will execute later anyway
+    return env.DB.prepare('insert into sessions values (?,?,?,?)').bind(serverId, username, ip, timestamp).run()
 }
 
 export function cleanSession(env, timestamp) {

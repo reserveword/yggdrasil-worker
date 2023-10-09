@@ -41,8 +41,8 @@ async function authenticate(env, data) {
 	if (user.password !== data.password) {
 		return response.authFail()
 	}
-	user.clientToken = data.clientToken
-	users.setUserToken(env, user)
+	user.client_token = data.clientToken
+	await users.setUserToken(env, user)
 	const profile = await profiles.getProfile(env, user.profile)
 	return response.success({
 		accessToken: user.access_token,
@@ -87,7 +87,7 @@ async function signout(env, data) {
 		return response.authFail()
 	}
 	user.clientToken = ''
-	users.setUserToken(env, user)
+	await users.setUserToken(env, user)
 	return response.authFail()
 }
 
@@ -96,12 +96,13 @@ async function joinServer(env, data, ip) {
 	if (user === null) {
 		return response.authFail()
 	}
-	sessions.addSession(env, data.serverId, user.username, ip)
+	const profile = await profiles.getProfile(env, user.profile)
+	await sessions.addSession(env, data.serverId, profile.name, ip)
 	return response.success()
 }
 
 function hasJoinedOfficial(data) {
-	let url = new URL('https://api.mojang.com/sessionserver/session/minecraft/hasJoined')
+	let url = new URL('https://sessionserver.mojang.com/session/minecraft/hasJoined')
 	for (const [key, value] of data) {
 		url.searchParams.append(key, value)
 	}
@@ -215,7 +216,8 @@ export default {
 		if (url.pathname === '/authserver/invalidate') return await invalidate(env, await request.json())
 		if (url.pathname === '/authserver/signout') return await signout(env, await request.json())
 		// session
-		if (url.pathname === '/sessionserver/session/minecraft/join') return await joinServer(env, await request.json(), request.ip)
+		// i don't know where to get request src ip
+		if (url.pathname === '/sessionserver/session/minecraft/join') return await joinServer(env, await request.json(), '0.0.0.0')
 		if (url.pathname.slice(0, 42) === '/sessionserver/session/minecraft/hasJoined') {
 			return await hasJoined(env, url.searchParams)
 		}
