@@ -181,9 +181,9 @@ async function uploadSkin(env, data, host) {
 	const {image, digest} = await png.processPng(data.texture, profile.id)
 	jsonTexture.timestamp = new Date().getTime()
 	jsonTexture.textures.SKIN = {
-		url: host + '/textures/' + digest,
+		url: 'https://' + host + '/textures/' + digest,
 		metadata: {
-			model: data.model
+			model: data.model === 'slim' ? 'slim' : 'default'
 		}
 	}
 	const result = await profiles.updateTexture(env, user.profile, btoa(JSON.stringify(jsonTexture)))
@@ -249,7 +249,6 @@ export default {
 				ASSET_MANIFEST: assetManifest,
 			});
 		} catch (e) {
-			return response.success(assetManifest)
 			return response.notImpl()
 		}
 	},

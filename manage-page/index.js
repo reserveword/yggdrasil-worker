@@ -4,6 +4,7 @@ async function userLogin() {
         body: JSON.stringify({
             username: document.getElementById('username').value,
             password: document.getElementById('password').value,
+            clientToken: ''
         })
     }).then(x=>x.json())
     document.getElementById('access-token').value = user.accessToken
@@ -34,6 +35,7 @@ async function uploadSkin() {
         body: JSON.stringify({
             accessToken: document.getElementById('access-token').value,
             texture: b64skin,
+            model: document.getElementById('skin-type-slim').checked ? 'slim' : 'default'
         })
     })
 }

@@ -20,7 +20,11 @@
         <form>
             角色名<input type="text" id="character"><br>
             <input type="button" value="更新" id="update-profile" onclick="updateUser()"><br>
-            皮肤<input type="file" id="skin"><input type="button" value="提交" onclick="uploadSkin()">
+            皮肤
+            <input type="radio" value="default" name="skin-type" id="skin-type-default" checked><label for="skin-type-default">Steve</label>
+            <input type="radio" value="slim" name="skin-type" id="skin-type-slim"><label for="skin-type-slim">Alex</label><br>
+            <input type="file" id="skin">
+            <input type="button" value="提交" onclick="uploadSkin()">
         </form>
     </div>
     <div>
