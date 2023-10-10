@@ -225,6 +225,9 @@ export default {
 		if (url.pathname.slice(0, 24) === '/api/profiles/minecraft/') {
 			return await profile(env, url.pathname.slice(24))
 		}
+		if (url.pathname.slice(0, 41) === '/sessionserver/session/minecraft/profile/') {
+			return await profile(env, url.pathname.slice(41))
+		}
 		// texture
 		if (url.pathname.slice(0, 10) === '/textures/') {
 			return await texture(env, url.pathname.slice(10))
